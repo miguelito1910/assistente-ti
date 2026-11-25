@@ -178,8 +178,3 @@ npm run dev
   3. Validação a nível de banco com `CHECK constraints` no PostgreSQL.
 - **Isolamento em Testes**: Todos os testes com Pytest utilizam mocks, garantindo testes rápidos, determinísticos e sem consumo da cota da API.
 
----
-
-## 📄 Licença
-
-Este projeto é desenvolvido para fins educacionais e práticos sob a licença MIT.
