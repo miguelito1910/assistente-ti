@@ -22,6 +22,18 @@ from app.services import gemini_service, problem_service
 router = APIRouter(prefix="/problems", tags=["Problemas"])
 
 
+def _is_ai_overloaded_error(exc: Exception) -> bool:
+    """Identifica erros temporários de alta demanda (503) ou limite de requisições (429) da IA."""
+    code = getattr(exc, "code", None)
+    if code in (429, 503):
+        return True
+    message = str(exc).lower()
+    return any(
+        token in message
+        for token in ("503", "unavailable", "high demand", "429", "resource_exhausted", "rate limit")
+    )
+
+
 @router.post(
     "",
     response_model=ProblemResponse,
@@ -36,14 +48,21 @@ def create_problem(request: ProblemCreateRequest) -> ProblemResponse:
     """
     Fluxo completo de registro de um problema:
     1. FastAPI valida automaticamente o body via ProblemCreateRequest.
-    2. Envia a descrição para o Gemini (mock nesta etapa).
+    2. Envia a descrição para o Gemini.
     3. Persiste o resultado no PostgreSQL.
     4. Retorna os dados completos com status 201 Created.
     """
     try:
-        # Etapa 2: Analisar com IA (mock por enquanto)
         analysis = gemini_service.analyze_problem(request.description)
     except Exception as exc:
+        if _is_ai_overloaded_error(exc):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=(
+                    "O serviço de IA está com alta demanda no momento. "
+                    "Aguarde alguns segundos e tente novamente."
+                ),
+            ) from exc
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Erro ao consultar o serviço de IA: {exc}",

@@ -1,15 +1,18 @@
-// Definição dos tipos do sistema (devem espelhar os Schemas do Backend)
+export const CATEGORIES = [
+  'Hardware',
+  'Software',
+  'Rede',
+  'Segurança',
+  'Sistema Operacional',
+  'Banco de Dados',
+  'Outros',
+] as const;
 
-export type Category =
-  | 'Hardware'
-  | 'Software'
-  | 'Rede'
-  | 'Segurança'
-  | 'Sistema Operacional'
-  | 'Banco de Dados'
-  | 'Outros';
+export type Category = (typeof CATEGORIES)[number];
 
-export type Priority = 'Baixa' | 'Média' | 'Alta';
+export const PRIORITIES = ['Alta', 'Média', 'Baixa'] as const;
+
+export type Priority = (typeof PRIORITIES)[number];
 
 export interface ProblemCreateRequest {
   description: string;

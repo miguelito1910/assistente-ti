@@ -1,121 +1,203 @@
-import { useState, useEffect } from 'react';
-import type { Problem } from './types/problem';
-import { createProblem, getProblems } from './services/api';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Category, Priority, Problem } from './types/problem';
+import { createProblem, getProblemById, getProblems } from './services/api';
 import { ProblemForm } from './components/ProblemForm';
-import { ProblemCard } from './components/ProblemCard';
+import { ProblemDetail } from './components/ProblemDetail';
+import { ProblemHistoryList } from './components/ProblemHistoryList';
 import './index.css';
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'create' | 'history'>('create');
   const [problems, setProblems] = useState<Problem[]>([]);
-  const [latestProblem, setLatestProblem] = useState<Problem | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isFetchingHistory, setIsFetchingHistory] = useState(false);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(true);
   const [historyError, setHistoryError] = useState<string | null>(null);
 
-  // Carrega o histórico de chamados ao mudar para a aba de histórico
-  useEffect(() => {
-    if (activeTab === 'history') {
-      fetchHistory();
-    }
-  }, [activeTab]);
+  const [isCreating, setIsCreating] = useState(false);
+  const [latestCreated, setLatestCreated] = useState<Problem | null>(null);
 
-  const fetchHistory = async () => {
-    setIsFetchingHistory(true);
+  const [selectedProblem, setSelectedProblem] = useState<Problem | null>(null);
+  const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [detailError, setDetailError] = useState<string | null>(null);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<Category | 'Todas'>('Todas');
+  const [priorityFilter, setPriorityFilter] = useState<Priority | 'Todas'>('Todas');
+
+  const fetchHistory = useCallback(async () => {
+    setIsLoadingHistory(true);
     setHistoryError(null);
     try {
       const data = await getProblems();
       setProblems(data);
-    } catch (err: any) {
-      setHistoryError(err.message || 'Erro ao carregar o histórico.');
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Não foi possível carregar o histórico de chamados.';
+      setHistoryError(message);
     } finally {
-      setIsFetchingHistory(false);
+      setIsLoadingHistory(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    getProblems()
+      .then((data) => {
+        if (!isCancelled) {
+          setProblems(data);
+          setHistoryError(null);
+        }
+      })
+      .catch((err: unknown) => {
+        if (!isCancelled) {
+          const message =
+            err instanceof Error
+              ? err.message
+              : 'Não foi possível carregar o histórico de chamados.';
+          setHistoryError(message);
+        }
+      })
+      .finally(() => {
+        if (!isCancelled) {
+          setIsLoadingHistory(false);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
   const handleCreateProblem = async (description: string) => {
-    setIsLoading(true);
+    setIsCreating(true);
+    setDetailError(null);
     try {
-      const newProblem = await createProblem({ description });
-      setLatestProblem(newProblem);
+      const created = await createProblem({ description });
+      setLatestCreated(created);
+      setSelectedProblem(null);
+      setProblems((prev) => [created, ...prev]);
     } finally {
-      setIsLoading(false);
+      setIsCreating(false);
     }
   };
 
-  return (
-    <div className="app-container">
-      {/* Barra de Navegação */}
-      <header className="navbar">
-        <div className="nav-brand">
-          <span style={{ fontSize: '1.5rem' }}>🛠️</span>
-          <h1>Assistente Inteligente de TI</h1>
-        </div>
+  const handleSelectProblem = async (id: number) => {
+    setIsLoadingDetail(true);
+    setDetailError(null);
+    try {
+      const problem = await getProblemById(id);
+      setSelectedProblem(problem);
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Não foi possível carregar os detalhes do chamado.';
+      setDetailError(message);
+    } finally {
+      setIsLoadingDetail(false);
+    }
+  };
 
-        <nav className="nav-tabs">
-          <button
-            className={`tab-btn ${activeTab === 'create' ? 'active' : ''}`}
-            onClick={() => setActiveTab('create')}
-          >
-            Novo Chamado
-          </button>
-          <button
-            className={`tab-btn ${activeTab === 'history' ? 'active' : ''}`}
-            onClick={() => setActiveTab('history')}
-          >
-            Histórico de Problemas
-          </button>
-        </nav>
+  const handleBackToNew = () => {
+    setSelectedProblem(null);
+    setDetailError(null);
+  };
+
+  const handleClearFilters = () => {
+    setSearchQuery('');
+    setCategoryFilter('Todas');
+    setPriorityFilter('Todas');
+  };
+
+  const filteredProblems = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    return problems.filter((problem) => {
+      if (categoryFilter !== 'Todas' && problem.category !== categoryFilter) {
+        return false;
+      }
+      if (priorityFilter !== 'Todas' && problem.priority !== priorityFilter) {
+        return false;
+      }
+      if (query !== '') {
+        const matchesSummary = problem.summary.toLowerCase().includes(query);
+        const matchesDescription = problem.description.toLowerCase().includes(query);
+        const matchesId = String(problem.id) === query.replace('#', '');
+        return matchesSummary || matchesDescription || matchesId;
+      }
+      return true;
+    });
+  }, [problems, searchQuery, categoryFilter, priorityFilter]);
+
+  return (
+    <div className="app-shell">
+      <a className="skip-link" href="#workspace-main">
+        Pular para o conteúdo
+      </a>
+
+      <header className="topbar">
+        <div className="wrap topbar-inner">
+          <div className="brand">
+            <span className="brand-mark" aria-hidden="true" />
+            <h1 className="brand-name">Assistente de TI</h1>
+          </div>
+
+          <div className="topbar-actions">
+            <span className="topbar-count">
+              {problems.length} {problems.length === 1 ? 'chamado' : 'chamados'}
+            </span>
+            {selectedProblem && (
+              <button type="button" className="btn btn--primary btn--sm" onClick={handleBackToNew}>
+                Novo registro
+              </button>
+            )}
+          </div>
+        </div>
       </header>
 
-      {/* Conteúdo Principal */}
-      <main className="main-content">
-        {activeTab === 'create' && (
-          <div>
-            <ProblemForm onSubmit={handleCreateProblem} isLoading={isLoading} />
-
-            {/* Exibição imediata do resultado após análise da IA */}
-            {latestProblem && (
-              <section className="result-section">
-                <h2>✨ Resultado da Análise da IA:</h2>
-                <ProblemCard problem={latestProblem} />
-              </section>
+      <main id="workspace-main" className="workspace">
+        <div className="wrap workspace-grid">
+          <div className="workspace-primary">
+            {detailError && (
+              <div className="alert-error" role="alert">
+                {detailError}
+              </div>
             )}
-          </div>
-        )}
 
-        {activeTab === 'history' && (
-          <div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-              <h2>Histórico de Atendimentos</h2>
-              <button
-                className="tab-btn"
-                onClick={fetchHistory}
-                disabled={isFetchingHistory}
-                style={{ border: '1px solid var(--border-color)' }}
-              >
-                🔄 Atualizar
-              </button>
-            </div>
-
-            {historyError && <div className="error-message">{historyError}</div>}
-
-            {isFetchingHistory ? (
-              <div className="empty-state">
-                <div className="spinner" style={{ margin: '0 auto 1rem auto' }}></div>
-                <p>Carregando histórico do banco de dados...</p>
-              </div>
-            ) : problems.length === 0 ? (
-              <div className="card empty-state">
-                <p>Nenhum problema registrado até o momento.</p>
-              </div>
+            {selectedProblem ? (
+              <ProblemDetail
+                problem={selectedProblem}
+                headingLabel="Detalhes do registro"
+                isLoading={isLoadingDetail}
+                onBackToNew={handleBackToNew}
+              />
             ) : (
-              problems.map((prob) => (
-                <ProblemCard key={prob.id} problem={prob} />
-              ))
+              <div className="workspace-stack">
+                <ProblemForm onSubmit={handleCreateProblem} isLoading={isCreating} />
+                {latestCreated && (
+                  <ProblemDetail
+                    problem={latestCreated}
+                    headingLabel="Resultado da triagem"
+                  />
+                )}
+              </div>
             )}
           </div>
-        )}
+
+          <aside className="workspace-secondary">
+            <ProblemHistoryList
+              problems={filteredProblems}
+              selectedId={selectedProblem?.id ?? null}
+              isLoading={isLoadingHistory}
+              error={historyError}
+              searchQuery={searchQuery}
+              categoryFilter={categoryFilter}
+              priorityFilter={priorityFilter}
+              onSearchChange={setSearchQuery}
+              onCategoryChange={setCategoryFilter}
+              onPriorityChange={setPriorityFilter}
+              onClearFilters={handleClearFilters}
+              onSelectProblem={handleSelectProblem}
+              onRefresh={fetchHistory}
+            />
+          </aside>
+        </div>
       </main>
     </div>
   );

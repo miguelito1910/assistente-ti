@@ -1,23 +1,20 @@
-import React from 'react';
 import type { Priority } from '../types/problem';
 
 interface PriorityBadgeProps {
   priority: Priority;
 }
 
-export const PriorityBadge: React.FC<PriorityBadgeProps> = ({ priority }) => {
-  const getBadgeClass = () => {
-    switch (priority) {
-      case 'Alta':
-        return 'badge-priority-alta';
-      case 'Média':
-        return 'badge-priority-media';
-      case 'Baixa':
-        return 'badge-priority-baixa';
-      default:
-        return '';
-    }
-  };
-
-  return <span className={`badge ${getBadgeClass()}`}>{priority}</span>;
+const PRIORITY_CLASS: Record<Priority, string> = {
+  Alta: 'priority-indicator--alta',
+  Média: 'priority-indicator--media',
+  Baixa: 'priority-indicator--baixa',
 };
+
+export function PriorityBadge({ priority }: PriorityBadgeProps) {
+  return (
+    <span className={`priority-indicator ${PRIORITY_CLASS[priority]}`}>
+      <span className="priority-dot" aria-hidden="true" />
+      <span>{priority}</span>
+    </span>
+  );
+}

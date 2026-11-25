@@ -88,6 +88,32 @@ class TestCreateProblem:
         assert response.status_code == 502
         assert "IA" in response.json()["detail"]
 
+    @patch(
+        "app.routes.problems.gemini_service.analyze_problem",
+        side_effect=Exception("503 UNAVAILABLE: This model is currently experiencing high demand."),
+    )
+    def test_gemini_alta_demanda_retorna_503(self, mock_gemini):
+        """Se o Gemini estiver em alta demanda (503), deve retornar 503 com mensagem clara."""
+        response = client.post(
+            "/problems",
+            json={"description": "Meu computador não acessa nenhum site."}
+        )
+        assert response.status_code == 503
+        assert "alta demanda" in response.json()["detail"]
+
+    @patch(
+        "app.routes.problems.gemini_service.analyze_problem",
+        side_effect=Exception("429 RESOURCE_EXHAUSTED"),
+    )
+    def test_gemini_limite_requisicoes_retorna_503(self, mock_gemini):
+        """Se o Gemini retornar limite de cota (429), deve retornar 503 amigável."""
+        response = client.post(
+            "/problems",
+            json={"description": "Meu computador não acessa nenhum site."}
+        )
+        assert response.status_code == 503
+        assert "alta demanda" in response.json()["detail"]
+
     @patch("app.routes.problems.problem_service.create_problem", side_effect=Exception("DB Error"))
     @patch("app.routes.problems.gemini_service.analyze_problem", return_value=MOCK_ANALYSIS)
     def test_erro_no_banco_retorna_500(self, mock_gemini, mock_service):
